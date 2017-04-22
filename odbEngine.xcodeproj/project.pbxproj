@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9F5446611E96F9B200820D43 /* DatabaseBlock.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F5446601E96F9B200820D43 /* DatabaseBlock.m */; };
 		9F7C81F01E8F040C006D2D73 /* ODB.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F7C81EF1E8F040C006D2D73 /* ODB.m */; };
 		9FB8B6A01D3442ED00FCDAA9 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FB8B69F1D3442ED00FCDAA9 /* main.m */; };
 		9FB8B6A81D34434600FCDAA9 /* Database.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FB8B6A71D34434600FCDAA9 /* Database.m */; };
 		9FE75EC61D4BF9C6001447F0 /* DatabaseHeader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FE75EC51D4BF9C6001447F0 /* DatabaseHeader.m */; };
 		9FE75EC91D4C0183001447F0 /* AvailableNodeShadow.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FE75EC81D4C0183001447F0 /* AvailableNodeShadow.m */; };
+		9FFAC3321EABED4600BE547D /* AvailableBlock.m in Sources */ = {isa = PBXBuildFile; fileRef = 9FFAC3311EABED4600BE547D /* AvailableBlock.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -27,6 +29,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		9F54465F1E96F9B200820D43 /* DatabaseBlock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DatabaseBlock.h; sourceTree = "<group>"; };
+		9F5446601E96F9B200820D43 /* DatabaseBlock.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseBlock.m; sourceTree = "<group>"; };
 		9F7C81EE1E8F040C006D2D73 /* ODB.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ODB.h; sourceTree = "<group>"; };
 		9F7C81EF1E8F040C006D2D73 /* ODB.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ODB.m; sourceTree = "<group>"; };
 		9FB8B69C1D3442ED00FCDAA9 /* odbEngine */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = odbEngine; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,6 +41,8 @@
 		9FE75EC51D4BF9C6001447F0 /* DatabaseHeader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DatabaseHeader.m; sourceTree = "<group>"; };
 		9FE75EC71D4C0183001447F0 /* AvailableNodeShadow.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AvailableNodeShadow.h; sourceTree = "<group>"; };
 		9FE75EC81D4C0183001447F0 /* AvailableNodeShadow.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AvailableNodeShadow.m; sourceTree = "<group>"; };
+		9FFAC3301EABED4600BE547D /* AvailableBlock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AvailableBlock.h; sourceTree = "<group>"; };
+		9FFAC3311EABED4600BE547D /* AvailableBlock.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AvailableBlock.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +75,8 @@
 		9FB8B69E1D3442ED00FCDAA9 /* odbEngine */ = {
 			isa = PBXGroup;
 			children = (
+				9FFAC3301EABED4600BE547D /* AvailableBlock.h */,
+				9FFAC3311EABED4600BE547D /* AvailableBlock.m */,
 				9FB8B69F1D3442ED00FCDAA9 /* main.m */,
 				9FB8B6A61D34434600FCDAA9 /* Database.h */,
 				9FB8B6A71D34434600FCDAA9 /* Database.m */,
@@ -78,6 +86,8 @@
 				9FE75EC81D4C0183001447F0 /* AvailableNodeShadow.m */,
 				9F7C81EE1E8F040C006D2D73 /* ODB.h */,
 				9F7C81EF1E8F040C006D2D73 /* ODB.m */,
+				9F54465F1E96F9B200820D43 /* DatabaseBlock.h */,
+				9F5446601E96F9B200820D43 /* DatabaseBlock.m */,
 			);
 			path = odbEngine;
 			sourceTree = "<group>";
@@ -142,6 +152,8 @@
 				9FE75EC91D4C0183001447F0 /* AvailableNodeShadow.m in Sources */,
 				9FB8B6A81D34434600FCDAA9 /* Database.m in Sources */,
 				9FB8B6A01D3442ED00FCDAA9 /* main.m in Sources */,
+				9FFAC3321EABED4600BE547D /* AvailableBlock.m in Sources */,
+				9F5446611E96F9B200820D43 /* DatabaseBlock.m in Sources */,
 				9F7C81F01E8F040C006D2D73 /* ODB.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

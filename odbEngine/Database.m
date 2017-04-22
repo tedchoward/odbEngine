@@ -8,6 +8,8 @@
 
 #import "Database.h"
 #import "DatabaseHeader.h"
+#import "DatabaseBlock.h"
+#import "AvailableBlock.h"
 #import "AvailableNodeShadow.h"
 
 #define DATABASE_HEADER_LENGTH 88
@@ -27,7 +29,7 @@
 typedef struct __database_file_header_t__ {
     uint8_t systemId;
     uint8_t versionNumber;
-    uint32_t availList;
+    uint32_t availList; // the address of the first available block
     int16_t oldFileDescriptor;
     int16_t flags;
     uint32_t views[3];
@@ -51,6 +53,11 @@ typedef struct __database_file_header_t__ {
     } u;
     
 } database_file_header_t;
+
+typedef struct __available_node_shadow_t__ {
+    uint32_t address;
+    uint32_t size;
+} available_node_shadow_t;
 #pragma options align=reset
 
 static UInt64 dbGetEof(NSFileHandle *fileHandle);
@@ -67,6 +74,7 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
 @property (nonatomic) NSInteger longVersionMinor;
 @property (nonatomic) NSInteger version;
 @property (nonatomic, strong) NSArray *shadowAvailList;
+@property (nonatomic) BOOL readOnly;
 @end
 
 @implementation Database
@@ -93,6 +101,7 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
     
     if (self) {
         self.fileHandle = fileHandle;
+        self.readOnly = readOnly;
         NSData *data = [fileHandle readDataOfLength:DATABASE_HEADER_LENGTH];
         [self parseHeaderData:data];
     }
@@ -136,6 +145,8 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
         self.version = DB_CURRENT_VERSION;
         self.dirty = YES;
     }
+    
+    [self buildAvailableBlockList];
 }
 
 - (NSData *)readBlockAtAddress:(NSUInteger)address {
@@ -185,7 +196,76 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
 //  }
 }
 
-- (bool)readShadowAvailList {
+- (BOOL)flushHeader {
+    if (_dirty) {
+        self.dirty = NO;
+        
+        database_file_header_t diskHeader;
+        memset(&diskHeader, 0, sizeof(diskHeader));
+        diskHeader.availList = CFSwapInt32HostToBig((uint32_t) _availList);
+        diskHeader.u.extensions.availListBlock = CFSwapInt32HostToBig((uint32_t) _availListBlock);
+        
+        for (NSUInteger i = 0, cnt = _views.count; i < cnt; i++) {
+            diskHeader.views[i] = CFSwapInt32HostToBig((uint32_t) [_views[i] unsignedIntegerValue]);
+        }
+        
+        diskHeader.headerLength = CFSwapInt32HostToBig((int32_t) _headerLength);
+        diskHeader.longVersionMajor = CFSwapInt16HostToBig((int16_t) _longVersionMajor);
+        diskHeader.longVersionMinor = CFSwapInt16HostToBig((int16_t) _longVersionMinor);
+        diskHeader.versionNumber = _version;
+        
+        [_fileHandle writeData:[NSData dataWithBytes:&diskHeader length:sizeof(diskHeader)]];
+        [_fileHandle synchronizeFile];
+    }
+    
+    return YES;
+}
+
+- (BOOL)releaseBlock:(NSUInteger)address {
+    if (address == 0) {
+        return YES;
+    }
+    
+    [self clearShadowAvailList];
+    
+    NSData *block = [self readBlockAtAddress:address];
+    
+    return NO;
+}
+
+
+#pragma mark - ShadowAvailList
+
+- (BOOL)buildAvailableBlockList {
+    
+    if (_availList != 0) {
+        return [self readShadowAvailList];
+    }
+    
+    NSUInteger address = _availList;
+    NSMutableArray *blockList = [[NSMutableArray alloc] init];
+    NSUInteger eof = dbGetEof(_fileHandle);
+    
+    while (address != 0) {
+        DatabaseBlock *block = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:address];
+        if (!block.free || (block.address + block.size) > eof) {
+            [NSException raise:@"ERROR_DB_FREE_LIST" format:NSLocalizedString(@"ERROR_DB_FREE_LIST", @"This database has a damaged free list. Use the Save a Copy command to create a new, compacted database.")];
+        }
+        
+        AvailableBlock *availableBlock = [[AvailableBlock alloc] init];
+        availableBlock.address = block.address;
+        availableBlock.size = block.size;
+        [blockList addObject:availableBlock];
+        
+        address = [block readNextFreeBlockAddress];
+    }
+    
+    self.shadowAvailList = [blockList copy];
+    
+    return YES;
+}
+
+- (BOOL)readShadowAvailList {
     UInt64 eof = dbGetEof(_fileHandle);
     if (eof == -1) {
         return NO;
@@ -195,29 +275,50 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
         return NO;
     }
     
-    NSData *data = [self readBlockAtAddress:_availListBlock];
-    if (data == nil) {
-        return NO;
-    }
+    DatabaseBlock *block = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:_availListBlock];
+    NSData *data = [block readData];
     
     NSMutableArray *ary = [[NSMutableArray alloc] init];
     
-    for (NSUInteger i = 0, cnt = (data.length / kAvailableNodeShadowSize); i < cnt; i++) {
-        NSData *subData = [data subdataWithRange:NSMakeRange((i + kAvailableNodeShadowSize), kAvailableNodeShadowSize)];
-        [ary addObject:[[AvailableNodeShadow alloc] initWithData:subData]];
-    }
-    
-    if (((AvailableNodeShadow *)ary[0]).address != _availListBlock) {
-        // error
-        return NO;
-    }
-    
-    if (((AvailableNodeShadow *)ary[0]).address != 0) {
+    available_node_shadow_t *diskAvailList = (available_node_shadow_t *)data.bytes;
+    for (NSUInteger i = 0, cnt = (data.length / sizeof(available_node_shadow_t)); i < cnt; i++) {
+        AvailableBlock *availableBlock = [[AvailableBlock alloc] init];
+        availableBlock.address = CFSwapInt32BigToHost(diskAvailList[i].address);
+        availableBlock.size = CFSwapInt32BigToHost(diskAvailList[i].size);
         
+        [ary addObject:availableBlock];
     }
     
+    NSUInteger firstAddress = ((AvailableBlock *)ary.firstObject).address;
     
-    return NO;
+    // Sanity Check: The first address should match the start of the availList in the header
+    if (firstAddress != _availList) {
+        [NSException raise:@"ERROR_DB_INCONSISTENT_AVAIL_LIST" format:NSLocalizedString(@"ERROR_DB_INCONSISTENT_AVAIL_LIST", @"This database has an inconsistent list of free blocks. Use the Save a Copy command to create a new, compacted database.")];
+    }
+    
+    // Sanity Check: The first block should be a valid free block
+    if (firstAddress != 0) {
+        DatabaseBlock *firstBlock = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:firstAddress];
+        if (!firstBlock.free || (firstBlock.address + firstBlock.size) > eof) {
+            [NSException raise:@"ERROR_DB_INCONSISTENT_AVAIL_LIST" format:NSLocalizedString(@"ERROR_DB_INCONSISTENT_AVAIL_LIST", @"This database has an inconsistent list of free blocks. Use the Save a Copy command to create a new, compacted database.")];
+        }
+    }
+    
+    self.shadowAvailList = [ary copy];
+    
+    return YES;
+}
+
+
+- (void)clearShadowAvailList {
+    if (!_readOnly) {
+        if (_availListBlock != 0) {
+            NSUInteger address = _availListBlock;
+            self.availListBlock = 0;
+            self.dirty = YES;
+            [self flushHeader];
+        }
+    }
 }
 
 @end

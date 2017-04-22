@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 
-const NSUInteger kAvailableNodeShadowSize;
+extern const NSUInteger kAvailableNodeShadowSize;
 
 @interface AvailableNodeShadow : NSObject
 @property (readonly) NSUInteger address;

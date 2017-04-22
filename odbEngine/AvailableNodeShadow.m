@@ -16,7 +16,7 @@ typedef struct __available_node_shadow_t__ {
 } available_node_shadow_t;
 #pragma options align=reset
 
-extern const NSUInteger kAvailableNodeShadowSize = sizeof(available_node_shadow_t);
+const NSUInteger kAvailableNodeShadowSize = sizeof(available_node_shadow_t);
 
 @interface AvailableNodeShadow ()
 @property (nonatomic) NSUInteger address;

@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 
-const NSUInteger kDatabaseHeaderSize;
+extern const NSUInteger kDatabaseHeaderSize;
 
 @interface DatabaseHeader : NSObject
 

@@ -18,7 +18,7 @@ typedef struct __database_header_t__ {
 } database_header_t;
 #pragma options align=reset
 
-extern const NSUInteger kDatabaseHeaderSize = sizeof(database_header_t);
+const NSUInteger kDatabaseHeaderSize = sizeof(database_header_t);
 
 @interface DatabaseHeader ()
 @property (nonatomic) BOOL free;
