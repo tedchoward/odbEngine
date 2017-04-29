@@ -8,14 +8,22 @@
 
 #import <Foundation/Foundation.h>
 
-@interface DatabaseBlock : NSObject
-@property (readonly) NSUInteger address;
-@property (readonly) BOOL free;
-@property (readonly) NSUInteger size;
-@property (readonly) NSUInteger variance; // number of unused bytes in the block
+#define MIN_BLOCK_SIZE 32L
+#define FIRST_PHYSICAL_ADDRESS 88L
 
-- (instancetype)initWithFileHandle:(NSFileHandle *)fileHandle address:(NSUInteger)address;
+extern const size_t kDatabaseHeaderSize;
+extern const size_t kDatabaseTrailerSize;
+
+@class Database;
+
+@interface DatabaseBlock : NSObject
+@property (readonly) UInt32 address;
+@property (readonly) BOOL free;
+@property (readonly) UInt32 size;
+@property (readonly) UInt32 variance; // number of unused bytes in the block
+
+- (instancetype)initWithFileHandle:(NSFileHandle *)fileHandle address:(UInt32)address;
 
 - (NSData *)readData;
-- (NSUInteger)readNextFreeBlockAddress;
+- (void)writeData:(NSData *)data;
 @end

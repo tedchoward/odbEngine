@@ -6,11 +6,11 @@
 //  Copyright © 2016 Ted C. Howard. All rights reserved.
 //
 
+#include "Utils.h"
+
 #import "Database.h"
-#import "DatabaseHeader.h"
 #import "DatabaseBlock.h"
-#import "AvailableBlock.h"
-#import "AvailableNodeShadow.h"
+#import "AvailableDatabaseBlock.h"
 
 #define DATABASE_HEADER_LENGTH 88
 
@@ -60,20 +60,15 @@ typedef struct __available_node_shadow_t__ {
 } available_node_shadow_t;
 #pragma options align=reset
 
-static UInt64 dbGetEof(NSFileHandle *fileHandle);
-
-
 @interface Database ()
 @property (nonatomic, strong) NSFileHandle *fileHandle;
-@property (nonatomic) NSUInteger availList;
-@property (nonatomic) NSUInteger availListBlock;
-@property (nonatomic) BOOL dirty;
+@property (nonatomic) UInt32 availListBlock;
 @property (nonatomic, strong) NSArray *views;
-@property (nonatomic) NSInteger headerLength;
-@property (nonatomic) NSInteger longVersionMajor;
-@property (nonatomic) NSInteger longVersionMinor;
-@property (nonatomic) NSInteger version;
-@property (nonatomic, strong) NSArray *shadowAvailList;
+@property (nonatomic) SInt32 headerLength;
+@property (nonatomic) SInt16 longVersionMajor;
+@property (nonatomic) SInt16 longVersionMinor;
+@property (nonatomic) UInt8 version;
+@property (nonatomic, strong) NSMutableArray *shadowAvailList;
 @property (nonatomic) BOOL readOnly;
 @end
 
@@ -125,7 +120,7 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
         [ary addObject:@(CFSwapInt32BigToHost(diskHeader.views[i]))];
     }
     
-    self.views = [ary copy];
+    self.views = ary;
     
     self.headerLength = CFSwapInt32BigToHost(diskHeader.headerLength);
     self.longVersionMajor = CFSwapInt16BigToHost(diskHeader.longVersionMajor);
@@ -149,51 +144,87 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
     [self buildAvailableBlockList];
 }
 
-- (NSData *)readBlockAtAddress:(NSUInteger)address {
-    if (address == 0) {
-        return nil;
+- (DatabaseBlock *)readBlockAtAddress:(UInt32)address {
+    DatabaseBlock *block = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:address];
+    
+    if (block.free) {
+        return [[AvailableDatabaseBlock alloc] initWithFileHandle:_fileHandle address:address];
     }
     
-    [_fileHandle seekToFileOffset:address];
-    NSData *headerData = [_fileHandle readDataOfLength:kDatabaseHeaderSize];
-    DatabaseHeader *header = [[DatabaseHeader alloc] initWithData:headerData];
+    return block;
+}
+
+- (AvailableDatabaseBlock *)availableBlockAtIndex:(NSUInteger)index {
+    return _shadowAvailList[index];
+}
+
+- (AvailableDatabaseBlock *)findPreviousAvailableBlockOfBlock:(AvailableDatabaseBlock *)currentBlock {
     
-    NSInteger count = header.size - header.variance;
-    
-    if (header.free || count < 0) {
-        return nil;
+    for (NSUInteger i = 0, cnt = _shadowAvailList.count; i < cnt; i++) {
+        AvailableDatabaseBlock *block = _shadowAvailList[i];
+        if (block.address == currentBlock.address) {
+            if (i > 0) {
+                return _shadowAvailList[i - 1];
+            } else {
+                return nil;
+            }
+        }
     }
     
-    NSData *blockData = [_fileHandle readDataOfLength:count];
-    return blockData;
+    [NSException raise:@"ERROR_DB_FREE_LIST" format:@"This database has a damaged free list. Use the Save a Copy command to create a new, compacted database."];
+    
+    return nil;
 }
 
-- (NSUInteger)allocateData:(NSData *)data {
-  return -1;
+- (void)setAvailableBlock:(AvailableDatabaseBlock *)availableBlock atIndex:(NSUInteger)index {
+    _shadowAvailList[index] = availableBlock;
+    availableBlock.index = index;
 }
 
-- (NSUInteger)assignData:(NSData *)data ofLength:(NSUInteger)length atAddress:(NSUInteger)address {
-  NSAssert(address == 0, @"Only new allocation currently implemented");
-  
-//  if (address == 0) {
-    // allocate new address
-  
-  return 0;
-  
-//  }
-//
-//  
-//  [_fileHandle seekToFileOffset:address];
-//  DatabaseHeader *header = [[DatabaseHeader alloc] initWithData:[_fileHandle readDataOfLength:kDatabaseHeaderSize]];
-//  
-//  if (header.free) {
-//    //ERROR
-//    return 0;
-//  }
-//  
-//  if (length > header.size) {
-//    
-//  }
+- (void)insertAvailableBlock:(AvailableDatabaseBlock *)availableBlock atIndex:(NSUInteger)index {
+    [_shadowAvailList insertObject:availableBlock atIndex:index];
+}
+
+- (void)removeAvailaleBlockAtIndex:(NSUInteger)index {
+    AvailableDatabaseBlock *block = _shadowAvailList[index];
+    block.index = -1;
+    [_shadowAvailList removeObjectAtIndex:index];
+}
+
+- (UInt32)allocateData:(NSData *)data {
+    
+    NSUInteger smallestAcceptableBlockSize = MAX(data.length, MIN_BLOCK_SIZE);
+    
+    for (AvailableDatabaseBlock *availableBlock in _shadowAvailList) {
+        if (availableBlock.cachedSize >= smallestAcceptableBlockSize) {
+            // We found our block!
+            UInt32 variance = availableBlock.size - (UInt32) data.length;
+            if (variance >= MIN_BLOCK_SIZE + kDatabaseHeaderSize + kDatabaseTrailerSize) {
+                // We have enough left over to be it's own block
+                //TODO: [block splitBlockAtAddress:availableBlock.address + (UInt32) data.length];
+            }
+            
+            BOOL blockIsInAvailList = availableBlock.free;
+            [availableBlock writeData:data];
+            
+            if (blockIsInAvailList) {
+                // remove from avail list
+            }
+            
+            return availableBlock.address;
+        }
+    }
+    
+    // If we get here, there are no available blocks that are big enough.
+    // We need to allocate a new block at the end of the file
+    
+    //TODO: do this
+    
+    return -1;
+}
+
+- (UInt32)assignData:(NSData *)data atAddress:(UInt32)address {
+    return address;
 }
 
 - (BOOL)flushHeader {
@@ -228,7 +259,7 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
     
     [self clearShadowAvailList];
     
-    NSData *block = [self readBlockAtAddress:address];
+//    NSData *block = [self readBlockAtAddress:address];
     
     return NO;
 }
@@ -242,25 +273,27 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
         return [self readShadowAvailList];
     }
     
-    NSUInteger address = _availList;
+    UInt32 address = _availList;
     NSMutableArray *blockList = [[NSMutableArray alloc] init];
-    NSUInteger eof = dbGetEof(_fileHandle);
+    UInt64 eof = dbGetEof(_fileHandle);
+    NSUInteger index = 0;
     
     while (address != 0) {
-        DatabaseBlock *block = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:address];
+        AvailableDatabaseBlock *block = (AvailableDatabaseBlock *) [self readBlockAtAddress:address];
         if (!block.free || (block.address + block.size) > eof) {
             [NSException raise:@"ERROR_DB_FREE_LIST" format:NSLocalizedString(@"ERROR_DB_FREE_LIST", @"This database has a damaged free list. Use the Save a Copy command to create a new, compacted database.")];
         }
         
-        AvailableBlock *availableBlock = [[AvailableBlock alloc] init];
-        availableBlock.address = block.address;
-        availableBlock.size = block.size;
-        [blockList addObject:availableBlock];
+        block.index = index;
+        block.cachedSize = block.size;
+        
+        [blockList addObject:block];
         
         address = [block readNextFreeBlockAddress];
+        index += 1;
     }
     
-    self.shadowAvailList = [blockList copy];
+    self.shadowAvailList = blockList;
     
     return YES;
 }
@@ -275,21 +308,21 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
         return NO;
     }
     
-    DatabaseBlock *block = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:_availListBlock];
+    DatabaseBlock *block = [self readBlockAtAddress:_availListBlock];
     NSData *data = [block readData];
     
     NSMutableArray *ary = [[NSMutableArray alloc] init];
     
     available_node_shadow_t *diskAvailList = (available_node_shadow_t *)data.bytes;
     for (NSUInteger i = 0, cnt = (data.length / sizeof(available_node_shadow_t)); i < cnt; i++) {
-        AvailableBlock *availableBlock = [[AvailableBlock alloc] init];
-        availableBlock.address = CFSwapInt32BigToHost(diskAvailList[i].address);
-        availableBlock.size = CFSwapInt32BigToHost(diskAvailList[i].size);
-        
+        UInt32 address = CFSwapInt32BigToHost(diskAvailList[i].address);
+        AvailableDatabaseBlock *availableBlock = [[AvailableDatabaseBlock alloc] initWithFileHandle:_fileHandle address:address];
+        availableBlock.cachedSize = CFSwapInt32BigToHost(diskAvailList[i].size);
+        availableBlock.index = i;
         [ary addObject:availableBlock];
     }
     
-    NSUInteger firstAddress = ((AvailableBlock *)ary.firstObject).address;
+    UInt32 firstAddress = ((AvailableDatabaseBlock *)ary.firstObject).address;
     
     // Sanity Check: The first address should match the start of the availList in the header
     if (firstAddress != _availList) {
@@ -298,13 +331,13 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
     
     // Sanity Check: The first block should be a valid free block
     if (firstAddress != 0) {
-        DatabaseBlock *firstBlock = [[DatabaseBlock alloc] initWithFileHandle:_fileHandle address:firstAddress];
+        AvailableDatabaseBlock * firstBlock = (AvailableDatabaseBlock *)ary.firstObject;
         if (!firstBlock.free || (firstBlock.address + firstBlock.size) > eof) {
             [NSException raise:@"ERROR_DB_INCONSISTENT_AVAIL_LIST" format:NSLocalizedString(@"ERROR_DB_INCONSISTENT_AVAIL_LIST", @"This database has an inconsistent list of free blocks. Use the Save a Copy command to create a new, compacted database.")];
         }
     }
     
-    self.shadowAvailList = [ary copy];
+    self.shadowAvailList = ary;
     
     return YES;
 }
@@ -313,7 +346,7 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
 - (void)clearShadowAvailList {
     if (!_readOnly) {
         if (_availListBlock != 0) {
-            NSUInteger address = _availListBlock;
+            UInt32 address = _availListBlock;
             self.availListBlock = 0;
             self.dirty = YES;
             [self flushHeader];
@@ -322,10 +355,3 @@ static UInt64 dbGetEof(NSFileHandle *fileHandle);
 }
 
 @end
-
-static UInt64 dbGetEof(NSFileHandle *fileHandle) {
-    UInt64 offset = fileHandle.offsetInFile;
-    UInt64 eof = [fileHandle seekToEndOfFile];
-    [fileHandle seekToFileOffset:offset];
-    return eof;
-}

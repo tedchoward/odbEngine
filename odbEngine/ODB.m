@@ -44,26 +44,30 @@ typedef struct __database_file_record_t__ {
 } database_file_record_t; // was `tyversion2cancoonrecord`
 #pragma options align=reset
 
-@interface ODB(private)
+const size_t kDatabaseFileRecordSize = sizeof(database_file_record_t);
+
+@interface ODB ()
 @property (nonatomic, strong) Database *databaseRecord;
 @end
 
 @implementation ODB
 
 - (instancetype)initWithNewFile:(NSFileHandle *)fileHandle {
-  self = [super init];
-  
-  if (self) {
-    database_file_record_t info;
-    memset(&info, 0, sizeof(info));
-    uint32_t address = 0;
+    self = [super init];
     
-    self.databaseRecord = [Database newDatabaseWithFileHandle:fileHandle];
+    if (self) {
+        database_file_record_t info;
+        memset(&info, 0, sizeof(info));
+        UInt32 address = 0;
+        
+        self.databaseRecord = [Database newDatabaseWithFileHandle:fileHandle];
+        
+        info.versionNumber = CFSwapInt16HostToBig(VERSION_NUMBER);
+        
+        [_databaseRecord assignData:[NSData dataWithBytes:&info length:kDatabaseFileRecordSize] atAddress:address];
+    }
     
-    info.versionNumber = CFSwapInt16HostToBig(VERSION_NUMBER);
-  }
-  
-  return self;
+    return self;
 }
 
 @end
